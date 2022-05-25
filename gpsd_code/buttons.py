@@ -26,14 +26,14 @@ else:
             #Set the Buttons and LED pins
             import os
 
-            self.greenButton = os.getenv("GREEN_BTN")
-            self.greenLED = os.getenv("GREEN_LED")
+            self.greenButton = int(os.getenv("GREEN_BTN"))
+            self.greenLED = int(os.getenv("GREEN_LED"))
 
-            self.redButton = os.getenv("RED_BTN")
-            self.redLED = os.getenv("RED_LED")
+            self.redButton = int(os.getenv("RED_BTN"))
+            self.redLED = int(os.getenv("RED_LED"))
 
-            self.blueButton = os.getenv("BLUE_BTN")
-            self.blueLED = os.getenv("BLUE_LED")
+            self.blueButton = int(os.getenv("BLUE_BTN"))
+            self.blueLED = int(os.getenv("BLUE_LED"))
             
             #Set warnings off (optional)
             GPIO.setwarnings(False)
