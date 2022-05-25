@@ -23,7 +23,7 @@ else:
         def __init__(self, on_green, on_blue, on_red):
             super(Buttons, self).__init__()
 
-            #Set the Buttons and LED pins
+            # Set the Buttons and LED pins
             import os
 
             self.greenButton = int(os.getenv("GREEN_BTN"))
@@ -35,12 +35,12 @@ else:
             self.blueButton = int(os.getenv("BLUE_BTN"))
             self.blueLED = int(os.getenv("BLUE_LED"))
             
-            #Set warnings off (optional)
+            # Set warnings off (optional)
             GPIO.setwarnings(False)
             GPIO.setmode(GPIO.BCM)
             GPIO.cleanup()
             
-            #Setup the Buttons and LEDs
+            # Setup the Buttons and LEDs
             GPIO.setup(self.greenButton,GPIO.IN,pull_up_down=GPIO.PUD_UP)
             GPIO.setup(self.greenLED,GPIO.OUT)
 

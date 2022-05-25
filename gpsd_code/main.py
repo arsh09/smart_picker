@@ -55,8 +55,7 @@ class MainApp():
         self._gui.setDescription(desc)
 
     def get_text(self):
-        print(desc)
-        self._gui.getDescription()
+        return self._gui.getDescription()
 
     def start(self, gps_rate=None):
         # User login
