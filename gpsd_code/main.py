@@ -112,31 +112,32 @@ class MainApp():
     # this receives updated state for the current user
     def update_orders_cb(self, new_state):
         old_state = self.rs.state
+        self.rs.state = new_state
 
         # CONNECTED sent from the coordintor on agent init
         if new_state in ["CONNECTED"]:
             self.set_text("Connected to Server.")
             self.set(True)
 
+
         # REGISTERED sent once human_base_init completes, at this point the picker is able to respond
         # car_INIT sent after completion or cancellation
         elif new_state in ["REGISTERED", "car_INIT"]:
             self.set_text("Ready to Call")
-            self.set(False)
+            self.set(g=True, r=False, b=False) #prompt for valid inputs
+
 
         # car_ACCEPT sent once robot is assigned by coordinator in response to BEGUN
         elif new_state in ["car_ACCEPT"]:
             self.set_text("A Robot is on the way")
             self.set(g=False, r=True, b=False)
-            self.rs.accepted_robot()
 
         # car_ARRIVED sent once robot has reached the picker
         elif new_state in ["car_ARRIVED"]:
-            self.set_text("Load trays on robot then press blue button.")
-            self.set(False)
+            self.set_text("Load trays on robot then press BLUE button.")
+            self.set(g=False, r=True, b=True)
             self.blink_thr = threading.Thread(target=self.blue_blink)
             self.blink_thr.start()
-            self.rs.robot_arrived()
 
         # car_LOADED sent by picker once trays have been loaded
         # elif new_state == "car_LOADED" and old_state == "car_LOADED":
@@ -150,17 +151,22 @@ class MainApp():
         elif new_state in ["car_CANCEL"]:
             self.set_text("Task Has Been Cancelled. \nClick any to Reset")
             self.set(g=False, r=True, b=False)
-            self.rs.cancel()
 
 
     def green_callback(self, _):
         print("Green button pressed")
         if self.rs.state in ["REGISTERED", "car_INIT"]:
-            self.set_text("Calling Robot.")
-            self.set(g=True)
+            self.set_text("Request has been sent.")
+            self.set(g=False, r=True, b=False) #prompt for valid inputs
+            # self.stop_blink.clear()
             self._ws.call_robot()
-            self.rs.call_robot()
-            self.stop_blink.clear()
+            self.rs.state = "car_CALLED"
+
+        elif self.rs.state in ["car_COMPLETE", "car_CANCEL"]:
+            self.set_text("Ready to Call")
+            self.set(g=True, r=False, b=False) #prompt for valid inputs
+            self.rs.state = "car_INIT"
+
         else:
             txt = self.get_text()
             self.set_text("Cannot call a robot right now.")
@@ -171,14 +177,13 @@ class MainApp():
         print("Red button pressed")
         if self.rs.state in ["car_CALLED", "car_ACCEPT", "car_ARRIVED"]:
             self.set_text("Cancelling...")
-            self.set(r=True)
+            self.stop_blink.clear()
+            self.set(False)
             self._ws.cancel_robot()
-            self.rs.cancel()
-            # time.sleep(1)
-            # self.set_text("Robot Sucessfully Cancelled.")
-            # self.set(g=False, r=False)
-            # time.sleep(1)
-            # self.set_text("Welcome to Call A Robot.")
+            self.rs.state = "car_CANCEL"
+            time.sleep(2)
+            self.set_text("Press GREEN to continue.")
+            self.set(g=True, r=False, b=False) #prompt for valid inputs
         else:
             txt = self.get_text()
             self.set_text("Cannot cancel any robot right now.")
@@ -188,16 +193,14 @@ class MainApp():
     def blue_callback(self, _):
         if self.rs.state in ["car_ARRIVED"]:
             self.set_text("Thank you the robot will now drive away.")
+            self.stop_blink.clear()
+            self.set(False)
             self._ws.set_loaded()
-            self.rs.robot_loaded()
-            # time.sleep(2)
-            # self.rs.user_reset()
-            # self._ws.set_init()
-            # self.set_text("Welcome to Call A Robot.")
-        elif self.rs.state in ["car_COMPLETE"]:
-            self.set_text("Thank you the robot will now drive away.")
-            self._ws.set_init()
-            self.rs.reset_session()
+            self.rs.state = "car_LOADED"
+            time.sleep(2)
+            self.set_text("Press GREEN to continue.")
+            self.set(g=True, r=False, b=False) #prompt for valid inputs
+
         else:
             txt = self.get_text()
             self.set_text("Cannot load a robot right now.")
