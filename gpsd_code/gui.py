@@ -57,6 +57,9 @@ class GUI:
 
     def setDescription(self, string):
         self.main_w.label_text.set(string)
+
+    def getDescription(self):
+        self.main_w.label_text.get()
         
     def setUser(self, string):
         self.main_w.user_text.set(string)

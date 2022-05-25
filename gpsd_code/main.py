@@ -1,20 +1,20 @@
-
 #!/usr/bin/env python3
-# 
-from os import path, getenv
-from robotStateCode import RobotState
-from logging import basicConfig, INFO
-basicConfig(level=INFO)
+
+import os
 import threading
 import json
 import time
+from uuid import getnode as gma
 
+from robotStateCode import RobotState
 import gui
 import buttons
 import _gps
 import ws
 
-from uuid import getnode as gma
+from logging import basicConfig, INFO
+basicConfig(level=INFO)
+
 
 class MainApp():
 
@@ -31,30 +31,55 @@ class MainApp():
             on_blue=self.blue_callback, 
             on_red=self.red_callback
         )
+
         self.rs = RobotState()
         print("The first state in the state machine is: %s" % self.rs.state)
-#        print("Mac Address: " + str(gma()))
+        # print("Mac Address: " + str(gma()))
         self._gps = _gps.GPS()
+
+    def set(self, all=None, r=None, g=None, b=None):
+        if all is not None:
+            r, g, b = all, all, all
+        if r is not None:
+            self._buttons.setRedLed(r)
+            self._gui.setRedButton(r)
+        if g is not None:
+            self._buttons.setGreenLed(g)
+            self._gui.setGreenButton(g)
+        if b is not None:
+            self._buttons.setBlueLed(b)
+            self._gui.setBlueButton(b)
+
+    def set_text(self, desc):
+        print(desc)
+        self._gui.setDescription(desc)
+
+    def get_text(self):
+        print(desc)
+        self._gui.getDescription()
 
     def start(self, gps_rate=None):
         # User login
-        #self.user_name = self._gui.waitForLogin() # < blocking
+        # self.user_name = self._gui.waitForLogin() # < blocking
+        if os.getenv('USERNAME', None):
+            self.user_name = os.getenv('USERNAME')
+        else:
+            temp_user = '%012x' % gma()
+            self.user_name = "picker_"+temp_user.replace(':', '')
+            print("User: "+self.user_name)
 
-        tempUser = '%012x' % gma()
-        
-        self.user_name = "picker_"+tempUser.replace(':', '') 
-        print("User: "+self.user_name)
-        
         # init websocket
-        self._ws = ws.WS(address="wss://lcas.lincoln.ac.uk/car/ws", user_name=self.user_name, 
-            update_orders_cb=self.update_orders_cb)
+        address = os.getenv('WEBSERVER_ADDRESS')
+        self._ws = ws.WS(address=address,
+                         user_name=self.user_name,
+                         update_orders_cb=self.update_orders_cb)
 
         # setup the main gui window
         self._gui.setupMainWindow()
 
         self._gui.setUser("User: " + self.user_name)
-        self._gui.setDescription("Welcome to Call A Robot.")
-        
+        self.set_text("Welcome to Call A Robot.")
+
         # start gps thread
         self._gps.start()
 
@@ -63,18 +88,18 @@ class MainApp():
 
         print("Initialization complete")
         if gps_rate is None:
-            ## we want gps readings as soon as they arrive
+            # we want gps readings as soon as they arrive
             self._gps.set_callback(self._ws.send_gps)
 
             # start gui thread (tkinter only runs on the main thread :-( )
             self._gui.loopMainWindow()  # < blocking
         else:
-            ## we want gps readings at a certain rate
+            # we want gps readings at a certain rate
             seconds = 1./float(gps_rate)
 
             while self._gps.has_more_data():
                 lat, lon, epx, epy, ts  = self._gps.get_latest_data()
-                
+
                 self._ws.send_gps(lat, lon, epx, epy, ts)
 
                 time.sleep(seconds)
@@ -85,156 +110,108 @@ class MainApp():
         self._buttons.cleanup()
 
     # this receives updated state for the current user
-    def update_orders_cb(self, state):
-        if state == "ACCEPT":
-            if self.rs.state == "CALLED":
-                print("A Robot is on the way.")
-                self._gui.setDescription("A Robot is on the way")
-                self.rs.accepted_robot()
-        elif state == "INIT":
-            if self.rs.state == "CALLED":
-                print("Robot Has Been Cancelled.")
-                self._gui.setDescription("Robot Has Been Cancelled.")
-                self._buttons.setGreenLed(False)
-                self._gui.setGreenButton(False)
-                self._buttons.setRedLed(False)
-                self._gui.setRedButton(False)
-                self.rs.cancel_robot()
-            elif self.rs.state == "ACCEPTED":
-                print("Robot Has Been Cancelled.")    
-                self._gui.setDescription("Robot Has Been Cancelled.")
-                self._buttons.setGreenLed(False)
-                self._gui.setGreenButton(False)
-                self._buttons.setRedLed(False)
-                self._gui.setRedButton(False)
-                self.rs.cancel_accept()
-            elif self.rs.state == "ARRIVED":
-                print("Robot Load Has Been Cancelled.")    
-                self._gui.setDescription("Robot Load Has Been Cancelled.")
-                self.stop_blink.set()
-                self._buttons.setBlueLed(False)
-                self._gui.setBlueButton(False)
-                self._buttons.setRedLed(False)
-                self._gui.setRedButton(False)
-                self.rs.cancel_load()
-            time.sleep(1)
-            self._gui.setDescription("Welcome to Call A Robot.")
-        elif state == "ARRIVED":
-            if self.rs.state == "ACCEPTED":
-                self._buttons.setGreenLed(False)
-                self._gui.setGreenButton(False)
-                print("Robot has arrived.")
-                print("Please load the tray on the robot\n then press the blue button.")
-                self._gui.setDescription("Please load the tray on the robot\n then press the blue button.")
+    def update_orders_cb(self, new_state):
+        old_state = self.rs.state
 
-                self.blink_thr = threading.Thread(target=self.blue_blink)
-                
-                self.blink_thr.start()
-                self.rs.robot_arrived()
-        elif state == "LOADED":
-            if self.rs.state == "LOADED":
-                self.stop_blink.set()
+        # CONNECTED sent from the coordintor on agent init
+        if new_state in ["CONNECTED"]:
+            self.set_text("Connected to Server.")
+            self.set(True)
 
-        # update internal state
-        #self.rs.state = state
+        # REGISTERED sent once human_base_init completes, at this point the picker is able to respond
+        # car_INIT sent after completion or cancellation
+        elif new_state in ["REGISTERED", "car_INIT"]:
+            self.set_text("Ready to Call")
+            self.set(False)
+
+        # car_ACCEPT sent once robot is assigned by coordinator in response to BEGUN
+        elif new_state in ["car_ACCEPT"]:
+            self.set_text("A Robot is on the way")
+            self.set(g=False, r=True, b=False)
+            self.rs.accepted_robot()
+
+        # car_ARRIVED sent once robot has reached the picker
+        elif new_state in ["car_ARRIVED"]:
+            self.set_text("Load trays on robot then press blue button.")
+            self.set(False)
+            self.blink_thr = threading.Thread(target=self.blue_blink)
+            self.blink_thr.start()
+            self.rs.robot_arrived()
+
+        # car_LOADED sent by picker once trays have been loaded
+        # elif new_state == "car_LOADED" and old_state == "car_LOADED":
+        #     self.stop_blink.set()
+
+        # car_COMPLETE sent by ???
+        elif new_state in ["car_COMPLETE"]:
+            self.stop_blink.set()
+
+        # Task cancellation from coordinator
+        elif new_state in ["car_CANCEL"]:
+            self.set_text("Task Has Been Cancelled. \nClick any to Reset")
+            self.set(g=False, r=True, b=False)
+            self.rs.cancel()
 
 
     def green_callback(self, _):
         print("Green button pressed")
-        if (self.rs.state == "INIT"):
-            print("Calling Robot.")
-            self._gui.setDescription("Calling Robot.")
-            self._buttons.setGreenLed(True)
-            self._gui.setGreenButton(True)
+        if self.rs.state in ["REGISTERED", "car_INIT"]:
+            self.set_text("Calling Robot.")
+            self.set(g=True)
             self._ws.call_robot()
-            
             self.rs.call_robot()
-            
             self.stop_blink.clear()
-            # y = threading.Thread(target=check_arrived)
-            # y.start()
         else:
-            print("A Robot has already been called.")
-            self._gui.setDescription("A Robot has already been called.")
-            time.sleep(1)
-            self._gui.setDescription("Welcome to Call A Robot.")
-            
+            txt = self.get_text()
+            self.set_text("Cannot call a robot right now.")
+            time.sleep(2)
+            self.set_text(txt)
+
     def red_callback(self, _):
         print("Red button pressed")
-        if (self.rs.state=="CALLED"):
-            print("Cancelling...")
-            self._gui.setDescription("Cancelling...")
-            self._buttons.setRedLed(True)
-            self._gui.setRedButton(True)
+        if self.rs.state in ["car_CALLED", "car_ACCEPT", "car_ARRIVED"]:
+            self.set_text("Cancelling...")
+            self.set(r=True)
             self._ws.cancel_robot()
-            self.rs.cancel_robot()
-            time.sleep(1)
-            self._gui.setDescription("Robot Sucessfully Cancelled.")
-            self._buttons.setGreenLed(False)
-            self._gui.setGreenButton(False)
-            self._buttons.setRedLed(False)
-            self._gui.setRedButton(False)
-            time.sleep(1)
-            self._gui.setDescription("Welcome to Call A Robot.")
-        elif (self.rs.state=="ACCEPTED"):
-            print("Cancelling...")
-            self._gui.setDescription("Cancelling...")
-            self._buttons.setRedLed(True)
-            self._gui.setRedButton(True)
-            self._ws.cancel_robot()
-            self.rs.cancel_accept()
-            time.sleep(1)
-            self._gui.setDescription("Robot Sucessfully Cancelled.")
-            self._buttons.setGreenLed(False)
-            self._gui.setGreenButton(False)
-            self._buttons.setRedLed(False)
-            self._gui.setRedButton(False)
-            time.sleep(1)
-            self._gui.setDescription("Welcome to Call A Robot.")
-        elif (self.rs.state=="ARRIVED"):
-            print("Cancelling...")
-            self._gui.setDescription("Cancelling...")
-            self._buttons.setRedLed(True)
-            self._gui.setRedButton(True)
-            self._ws.cancel_robot()
-            self.rs.cancel_robot()
-            time.sleep(1)
-            self._gui.setDescription("Robot Sucessfully Cancelled.")
-            self._buttons.setGreenLed(False)
-            self._gui.setGreenButton(False)
-            self._buttons.setRedLed(False)
-            self._gui.setRedButton(False)
-            time.sleep(1)
-            self._gui.setDescription("Welcome to Call A Robot.")
+            self.rs.cancel()
+            # time.sleep(1)
+            # self.set_text("Robot Sucessfully Cancelled.")
+            # self.set(g=False, r=False)
+            # time.sleep(1)
+            # self.set_text("Welcome to Call A Robot.")
         else:
-            print("No incoming robots to cancel.")
-            self._gui.setDescription("No incoming robots to cancel.")
-            time.sleep(1)
-            self._gui.setDescription("Welcome to Call A Robot.")
+            txt = self.get_text()
+            self.set_text("Cannot cancel any robot right now.")
+            time.sleep(2)
+            self.set_text(txt)
 
     def blue_callback(self, _):
-        if (self.rs.state=="ARRIVED"):
-            self._gui.setDescription("Thank you the robot will now drive away.")
+        if self.rs.state in ["car_ARRIVED"]:
+            self.set_text("Thank you the robot will now drive away.")
             self._ws.set_loaded()
             self.rs.robot_loaded()
-            time.sleep(2)
-            self.rs.user_reset()
+            # time.sleep(2)
+            # self.rs.user_reset()
+            # self._ws.set_init()
+            # self.set_text("Welcome to Call A Robot.")
+        elif self.rs.state in ["car_COMPLETE"]:
+            self.set_text("Thank you the robot will now drive away.")
             self._ws.set_init()
-            self._gui.setDescription("Welcome to Call A Robot.")
+            self.rs.reset_session()
         else:
-            print("No robots to load.")
-            self._gui.setDescription("No robots to load.")
-            time.sleep(1)
-            self._gui.setDescription("Welcome to Call A Robot.")
-    
+            txt = self.get_text()
+            self.set_text("Cannot load a robot right now.")
+            time.sleep(2)
+            self.set_text(txt)
+
+
+
     def blue_blink(self):        
         while not (self.stop_blink.is_set()):
-            self._buttons.setBlueLed(True)
-            self._gui.setBlueButton(True)
+            self.set(b=True)
             time.sleep(0.5)
-            self._buttons.setBlueLed(False)
-            self._gui.setBlueButton(False)
-            time.sleep(0.5) 
+            self.set(b=False)
+            time.sleep(0.5)
 
 
 if __name__ == "__main__":

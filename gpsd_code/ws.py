@@ -5,11 +5,12 @@ from requests import post
 import threading
 import time
 import json
+import os
 
 class WS(threading.Thread):
-    def __init__(self, address="wss://lcas.lincoln.ac.uk/car/ws", user_name="picker02", update_orders_cb=None):
+    def __init__(self, address=None, user_name=None, update_orders_cb=None):
         threading.Thread.__init__(self)
-        self.addess = address
+        self.address = address or os.getenv('WS_ADDRESS')
         self._ws = create_connection(address)
         self.user_name = user_name
         self.update_orders_cb = update_orders_cb
@@ -23,10 +24,10 @@ class WS(threading.Thread):
         self._ws.send(json.dumps({'method':'cancel', 'user': self.user_name}))
 
     def set_loaded(self):
-        self._ws.send(json.dumps({'method':'set_state', 'user': self.user_name, 'state': 'LOADED'}))
+        self._ws.send(json.dumps({'method':'set_state', 'user': self.user_name, 'state': 'car_LOADED'}))
 
     def set_init(self):
-        self._ws.send(json.dumps({'method':'set_state', 'user': self.user_name, 'state': 'INIT'}))
+        self._ws.send(json.dumps({'method':'set_state', 'user': self.user_name, 'state': 'car_INIT'}))
 
     def send_gps(self, lat, lon, epx, epy, ts=time.time()):
         self._ws.send(json.dumps(
@@ -42,12 +43,7 @@ class WS(threading.Thread):
         ))
 
     def register(self):
-        res = post(
-            'https://lcas.lincoln.ac.uk/car/',
-            data={
-                'username': self.user_name
-            }
-        )
+        res = post(os.getenv('SITE_ADDRESS'), data={'username': self.user_name})
         self.registered = res.ok
         if self.registered:
             print("Registered, response:", res)
