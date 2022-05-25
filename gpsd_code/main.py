@@ -68,7 +68,7 @@ class MainApp():
             print("User: "+self.user_name)
 
         # init websocket
-        address = os.getenv('WEBSERVER_ADDRESS')
+        address = os.getenv('WS_ADDRESS')
         self._ws = ws.WS(address=address,
                          user_name=self.user_name,
                          update_orders_cb=self.update_orders_cb)
