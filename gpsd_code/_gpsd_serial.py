@@ -12,6 +12,7 @@ from gps import *
 import time
 import serial
 import re
+import os
 
 
 class GPS(threading.Thread):
@@ -24,7 +25,7 @@ class GPS(threading.Thread):
         self.has_more_data = True
         self.stop_event = threading.Event()
 
-        self.ser = serial.Serial('/dev/ttyS0',115200)
+        self.ser = serial.Serial( str(os.getenv("MODEM_SERIAL_PORT")),115200)
         self.ser.flushInput()  
 
         self.regex = r"(\+CGPSINFO: )[^\\]*"
@@ -83,9 +84,6 @@ class GPS(threading.Thread):
 
                                 positionLatLog = str(self.pureDegLat) + ", " + str(self.pureDegLog)
                                 print("GPS Online, Location: " + positionLatLog)
-                                
-                                #lat = int(pureDegLat)
-                                #lon = int(pureDegLog)                                
                               
                                 return self.pureDegLat, self.pureDegLog, -1, -1, time.time()
                             

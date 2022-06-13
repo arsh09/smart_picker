@@ -9,7 +9,14 @@ from uuid import getnode as gma
 from robotStateCode import RobotState
 import gui
 import buttons
-import _gps
+
+use_gpsd = bool( os.getenv("MODEM_SERIAL_PORT") )
+if use_gpsd: 
+    import _gpsd_service
+else:
+    import _gpsd_serial
+
+
 import ws
 
 from logging import basicConfig, INFO
